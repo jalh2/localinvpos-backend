@@ -27,6 +27,8 @@ const overview = asyncHandler(async (req, res) => {
     inventoryValueUSD: products.reduce((sum, product) => sum + ((Number(product.quantityInStock) || 0) * (Number(product.sellingPriceUSD) || 0)), 0),
     totalSalesLRD: sales.reduce((sum, tx) => sum + (Number(tx.totalLRD) || 0), 0),
     totalSalesUSD: sales.reduce((sum, tx) => sum + (Number(tx.totalUSD) || 0), 0),
+    totalSalesCount: sales.length,
+    pendingCreditCount: credits.length,
     pendingCreditLRD: pendingCredits.reduce((sum, credit) => sum + (Number(credit.totalLRD) || 0), 0),
     pendingCreditUSD: pendingCredits.reduce((sum, credit) => sum + (Number(credit.totalUSD) || 0), 0)
   })
