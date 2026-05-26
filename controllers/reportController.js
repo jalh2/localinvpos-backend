@@ -14,23 +14,52 @@ const loadScopedData = async (req) => {
   return { products, transactions, credits }
 }
 
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
+
 const overview = asyncHandler(async (req, res) => {
   const { products, transactions, credits } = await loadScopedData(req)
   const sales = transactions.filter(tx => tx.type === 'sale')
   const pendingCredits = credits.filter(credit => credit.status === 'pending')
 
+  const productMap = Object.fromEntries(products.map(p => [p.id, p]))
+
+  const inventoryValueLRD = r2(products.reduce((sum, p) => sum + (Number(p.quantityInStock) || 0) * (Number(p.sellingPriceLRD) || 0), 0))
+  const inventoryValueUSD = r2(products.reduce((sum, p) => sum + (Number(p.quantityInStock) || 0) * (Number(p.sellingPriceUSD) || 0), 0))
+  const inventoryCostLRD = r2(products.reduce((sum, p) => sum + (Number(p.quantityInStock) || 0) * (Number(p.unitCost) || 0), 0))
+  const inventoryWholesaleLRD = r2(products.reduce((sum, p) => sum + (Number(p.quantityInStock) || 0) * (Number(p.wholesalePriceLRD) || 0), 0))
+  const inventoryWholesaleUSD = r2(products.reduce((sum, p) => sum + (Number(p.quantityInStock) || 0) * (Number(p.wholesalePriceUSD) || 0), 0))
+  const expectedProfitLRD = r2(inventoryValueLRD - inventoryCostLRD)
+
+  const totalRevenueLRD = r2(sales.reduce((sum, tx) => sum + (Number(tx.totalLRD) || 0), 0))
+  const totalRevenueUSD = r2(sales.reduce((sum, tx) => sum + (Number(tx.totalUSD) || 0), 0))
+
+  const totalSpentLRD = r2(sales.reduce((sum, tx) => {
+    return sum + (tx.productsSold || []).reduce((s, item) => {
+      const prod = productMap[item.productId]
+      const unitCost = prod ? Number(prod.unitCost) || 0 : 0
+      return s + unitCost * (Number(item.quantity) || 0)
+    }, 0)
+  }, 0))
+  const periodProfitLRD = r2(totalRevenueLRD - totalSpentLRD)
+
   res.json({
     totalProducts: products.length,
-    lowStockCount: products.filter(product => Number(product.quantityInStock) <= Number(product.restockLevel)).length,
-    inventoryUnits: products.reduce((sum, product) => sum + (Number(product.quantityInStock) || 0), 0),
-    inventoryValueLRD: products.reduce((sum, product) => sum + ((Number(product.quantityInStock) || 0) * (Number(product.sellingPriceLRD) || 0)), 0),
-    inventoryValueUSD: products.reduce((sum, product) => sum + ((Number(product.quantityInStock) || 0) * (Number(product.sellingPriceUSD) || 0)), 0),
-    totalSalesLRD: sales.reduce((sum, tx) => sum + (Number(tx.totalLRD) || 0), 0),
-    totalSalesUSD: sales.reduce((sum, tx) => sum + (Number(tx.totalUSD) || 0), 0),
+    lowStockCount: products.filter(p => Number(p.quantityInStock) <= Number(p.restockLevel)).length,
+    inventoryUnits: products.reduce((sum, p) => sum + (Number(p.quantityInStock) || 0), 0),
+    inventoryValueLRD,
+    inventoryValueUSD,
+    inventoryCostLRD,
+    inventoryWholesaleLRD,
+    inventoryWholesaleUSD,
+    expectedProfitLRD,
+    totalSalesLRD: totalRevenueLRD,
+    totalSalesUSD: totalRevenueUSD,
     totalSalesCount: sales.length,
+    totalSpentLRD,
+    periodProfitLRD,
     pendingCreditCount: credits.length,
-    pendingCreditLRD: pendingCredits.reduce((sum, credit) => sum + (Number(credit.totalLRD) || 0), 0),
-    pendingCreditUSD: pendingCredits.reduce((sum, credit) => sum + (Number(credit.totalUSD) || 0), 0)
+    pendingCreditLRD: r2(pendingCredits.reduce((sum, c) => sum + (Number(c.totalLRD) || 0), 0)),
+    pendingCreditUSD: r2(pendingCredits.reduce((sum, c) => sum + (Number(c.totalUSD) || 0), 0))
   })
 })
 

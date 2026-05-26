@@ -5,9 +5,13 @@ const {
   listStores,
   getStore,
   updateStore,
+  createUser,
   createOwner,
+  listUsers,
   listOwners,
+  getUser,
   getOwner,
+  updateUser,
   updateOwner,
   overview
 } = require('../controllers/adminController')
@@ -21,6 +25,10 @@ router.post('/stores', createStore)
 router.get('/stores', listStores)
 router.get('/stores/:id', getStore)
 router.put('/stores/:id', updateStore)
+router.post('/users', createUser)
+router.get('/users', listUsers)
+router.get('/users/:id', getUser)
+router.put('/users/:id', updateUser)
 router.post('/owners', createOwner)
 router.get('/owners', listOwners)
 router.get('/owners/:id', getOwner)

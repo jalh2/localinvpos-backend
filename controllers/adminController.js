@@ -31,17 +31,19 @@ const updateStore = asyncHandler(async (req, res) => {
   res.json(store)
 })
 
-const createOwner = asyncHandler(async (req, res) => {
+const createUser = asyncHandler(async (req, res) => {
   const existing = await userModel.findByUsername(req.body.username || req.body.email)
   if (existing) {
     res.status(400)
     throw new Error('User already exists')
   }
 
+  const role = req.body.role === 'employee' ? 'employee' : 'owner'
+
   let storeId = req.body.storeId
   let store = storeId ? await storeModel.findById(storeId) : null
 
-  if (!store && req.body.storeName) {
+  if (!store && req.body.storeName && role === 'owner') {
     store = await storeModel.create({
       name: req.body.storeName,
       location: req.body.storeLocation || '',
@@ -53,11 +55,11 @@ const createOwner = asyncHandler(async (req, res) => {
     storeId = store.id
   }
 
-  const owner = await userModel.create({
+  const user = await userModel.create({
     username: req.body.username || req.body.email,
     email: req.body.email || '',
     password: hashPassword(req.body.password || 'password'),
-    role: 'owner',
+    role,
     displayName: req.body.displayName || req.body.name || '',
     phone: req.body.phone || '',
     isActive: req.body.isActive !== false,
@@ -66,9 +68,20 @@ const createOwner = asyncHandler(async (req, res) => {
     exchangeRateUsdToLrd: Number(req.body.exchangeRateUsdToLrd) || 180
   })
 
-  if (storeId) await storeModel.update(storeId, { ownerId: owner.id })
+  if (storeId && role === 'owner') await storeModel.update(storeId, { ownerId: user.id })
 
-  res.status(201).json(sanitizeUser(owner))
+  res.status(201).json(sanitizeUser(user))
+})
+
+const createOwner = createUser
+
+const listUsers = asyncHandler(async (req, res) => {
+  const { role, storeId } = req.query
+  const filter = {}
+  if (role) filter.role = role
+  if (storeId) filter.storeId = storeId
+  const users = await userModel.findAll(filter)
+  res.json(users.filter(u => u.role !== 'superadmin').map(sanitizeUser))
 })
 
 const listOwners = asyncHandler(async (req, res) => {
@@ -76,23 +89,27 @@ const listOwners = asyncHandler(async (req, res) => {
   res.json(owners.map(sanitizeUser))
 })
 
-const getOwner = asyncHandler(async (req, res) => {
-  const owner = await userModel.findById(req.params.id)
-  if (!owner) {
+const getUser = asyncHandler(async (req, res) => {
+  const user = await userModel.findById(req.params.id)
+  if (!user) {
     res.status(404)
-    throw new Error('Owner not found')
+    throw new Error('User not found')
   }
-  res.json(sanitizeUser(owner))
+  res.json(sanitizeUser(user))
 })
 
-const updateOwner = asyncHandler(async (req, res) => {
+const getOwner = getUser
+
+const updateUser = asyncHandler(async (req, res) => {
   const data = { ...req.body }
-  delete data.role
+  if (data.role === 'superadmin') delete data.role
   if (data.password) data.password = hashPassword(data.password)
-  const owner = await userModel.update(req.params.id, data)
-  if (data.storeId) await storeModel.update(data.storeId, { ownerId: owner.id })
-  res.json(sanitizeUser(owner))
+  const user = await userModel.update(req.params.id, data)
+  if (data.storeId && user.role === 'owner') await storeModel.update(data.storeId, { ownerId: user.id })
+  res.json(sanitizeUser(user))
 })
+
+const updateOwner = updateUser
 
 const overview = asyncHandler(async (req, res) => {
   const stores = await storeModel.findAll()
@@ -112,4 +129,4 @@ const overview = asyncHandler(async (req, res) => {
   })
 })
 
-module.exports = { createStore, listStores, getStore, updateStore, createOwner, listOwners, getOwner, updateOwner, overview }
+module.exports = { createStore, listStores, getStore, updateStore, createUser, createOwner, listUsers, listOwners, getUser, getOwner, updateUser, updateOwner, overview }
