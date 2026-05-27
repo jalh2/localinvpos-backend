@@ -8,6 +8,7 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware')
 
 const userRoutes = require('./routes/userRoutes')
 const adminRoutes = require('./routes/adminRoutes')
+const storeUserRoutes = require('./routes/storeUserRoutes')
 const productRoutes = require('./routes/productRoutes')
 const transactionRoutes = require('./routes/transactionRoutes')
 const creditRoutes = require('./routes/creditRoutes')
@@ -45,6 +46,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/users', userRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/store-users', storeUserRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/transactions', transactionRoutes)
 app.use('/api/credits', creditRoutes)
