@@ -9,6 +9,55 @@ const sanitizeUser = (user) => {
   return safeUser
 }
 
+const register = asyncHandler(async (req, res) => {
+  const { username, email, password, displayName, phone, storeName, storeLocation, storeDescription, storePhone, baseCurrency, exchangeRateUsdToLrd } = req.body
+
+  const loginName = String(username || email || '').trim().toLowerCase()
+  if (!loginName || !password) {
+    res.status(400)
+    throw new Error('Username/email and password are required')
+  }
+
+  const existing = await userModel.findByUsername(loginName)
+  if (existing) {
+    res.status(400)
+    throw new Error('User already exists')
+  }
+
+  if (!storeName) {
+    res.status(400)
+    throw new Error('Store name is required')
+  }
+
+  const store = await storeModel.create({
+    name: storeName,
+    location: storeLocation || '',
+    description: storeDescription || '',
+    phone: storePhone || '',
+    baseCurrency: baseCurrency || 'LRD',
+    exchangeRateUsdToLrd: Number(exchangeRateUsdToLrd) || 180
+  })
+
+  const user = await userModel.create({
+    username: loginName,
+    email: String(email || '').trim().toLowerCase(),
+    password: hashPassword(password),
+    role: 'owner',
+    displayName: displayName || '',
+    phone: phone || '',
+    isActive: true,
+    storeId: store.id,
+    baseCurrency: baseCurrency || 'LRD',
+    exchangeRateUsdToLrd: Number(exchangeRateUsdToLrd) || 180
+  })
+
+  await storeModel.update(store.id, { ownerId: user.id })
+
+  const safeUser = sanitizeUser(user)
+  req.session.user = safeUser
+  res.status(201).json(safeUser)
+})
+
 const login = asyncHandler(async (req, res) => {
   const { username, email, password } = req.body
   const loginName = username || email
@@ -64,4 +113,4 @@ const getMyStore = asyncHandler(async (req, res) => {
   res.json(store)
 })
 
-module.exports = { sanitizeUser, login, logout, me, updateMe, getMyStore }
+module.exports = { sanitizeUser, register, login, logout, me, updateMe, getMyStore }
