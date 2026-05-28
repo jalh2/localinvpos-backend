@@ -14,6 +14,7 @@ const transactionRoutes = require('./routes/transactionRoutes')
 const creditRoutes = require('./routes/creditRoutes')
 const reportRoutes = require('./routes/reportRoutes')
 const currencyRateRoutes = require('./routes/currencyRateRoutes')
+const expenseRoutes = require('./routes/expenseRoutes')
 
 const app = express()
 
@@ -52,6 +53,7 @@ app.use('/api/transactions', transactionRoutes)
 app.use('/api/credits', creditRoutes)
 app.use('/api/reports', reportRoutes)
 app.use('/api/currency-rate', currencyRateRoutes)
+app.use('/api/expenses', expenseRoutes)
 
 app.use(notFound)
 app.use(errorHandler)

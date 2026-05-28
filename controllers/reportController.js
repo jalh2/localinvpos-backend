@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler')
 const productModel = require('../models/productModel')
 const transactionModel = require('../models/transactionModel')
 const creditModel = require('../models/creditModel')
+const expenseModel = require('../models/expenseModel')
 const { getScope } = require('../middleware/auth')
 const { parseDateRange, inRange } = require('../utils/dateRange')
 
@@ -11,13 +12,14 @@ const loadScopedData = async (req) => {
   const products = await productModel.findAll({ storeId: scope.storeId, ownerId: scope.ownerId })
   const transactions = (await transactionModel.findAll({ storeId: scope.storeId, ownerId: scope.ownerId, type: req.query.type })).filter(tx => inRange(tx.occurredAt, range))
   const credits = (await creditModel.findAll({ storeId: scope.storeId, ownerId: scope.ownerId, status: req.query.status })).filter(credit => inRange(credit.occurredAt, range))
-  return { products, transactions, credits }
+  const expenses = (await expenseModel.findAll({ storeId: scope.storeId, ownerId: scope.ownerId })).filter(expense => inRange(expense.occurredAt, range))
+  return { products, transactions, credits, expenses }
 }
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 
 const overview = asyncHandler(async (req, res) => {
-  const { products, transactions, credits } = await loadScopedData(req)
+  const { products, transactions, credits, expenses } = await loadScopedData(req)
   const sales = transactions.filter(tx => tx.type === 'sale')
   const pendingCredits = credits.filter(credit => credit.status === 'pending')
 
@@ -40,7 +42,9 @@ const overview = asyncHandler(async (req, res) => {
       return s + unitCost * (Number(item.quantity) || 0)
     }, 0)
   }, 0))
-  const periodProfitLRD = r2(totalRevenueLRD - totalSpentLRD)
+
+  const totalExpensesLRD = r2(expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0))
+  const periodProfitLRD = r2(totalRevenueLRD - totalSpentLRD - totalExpensesLRD)
 
   res.json({
     totalProducts: products.length,
@@ -59,7 +63,9 @@ const overview = asyncHandler(async (req, res) => {
     periodProfitLRD,
     pendingCreditCount: credits.length,
     pendingCreditLRD: r2(pendingCredits.reduce((sum, c) => sum + (Number(c.totalLRD) || 0), 0)),
-    pendingCreditUSD: r2(pendingCredits.reduce((sum, c) => sum + (Number(c.totalUSD) || 0), 0))
+    pendingCreditUSD: r2(pendingCredits.reduce((sum, c) => sum + (Number(c.totalUSD) || 0), 0)),
+    totalExpensesLRD,
+    totalExpensesCount: expenses.length
   })
 })
 
