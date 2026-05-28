@@ -3,6 +3,7 @@ const productModel = require('../models/productModel')
 const transactionModel = require('../models/transactionModel')
 const creditModel = require('../models/creditModel')
 const expenseModel = require('../models/expenseModel')
+const currencyRateModel = require('../models/currencyRateModel')
 const { getScope } = require('../middleware/auth')
 const { parseDateRange, inRange } = require('../utils/dateRange')
 
@@ -19,9 +20,12 @@ const loadScopedData = async (req) => {
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 
 const overview = asyncHandler(async (req, res) => {
+  const scope = getScope(req)
   const { products, transactions, credits, expenses } = await loadScopedData(req)
   const sales = transactions.filter(tx => tx.type === 'sale')
   const pendingCredits = credits.filter(credit => credit.status === 'pending')
+  const currencyRate = await currencyRateModel.getCurrent({ storeId: scope.storeId, ownerId: scope.ownerId })
+  const rate = currencyRate?.lrdToUsd || 197
 
   const productMap = Object.fromEntries(products.map(p => [p.id, p]))
 
@@ -43,7 +47,16 @@ const overview = asyncHandler(async (req, res) => {
     }, 0)
   }, 0))
 
-  const totalExpensesLRD = r2(expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0))
+  const totalExpensesLRD = r2(expenses.reduce((sum, e) => {
+    const amount = Number(e.amount) || 0
+    if (e.currency === 'USD') return sum + (amount * rate)
+    return sum + amount
+  }, 0))
+  const totalExpensesUSD = r2(expenses.reduce((sum, e) => {
+    const amount = Number(e.amount) || 0
+    if (e.currency === 'USD') return sum + amount
+    return sum + (amount / rate)
+  }, 0))
   const periodProfitLRD = r2(totalRevenueLRD - totalSpentLRD - totalExpensesLRD)
 
   res.json({
@@ -65,6 +78,7 @@ const overview = asyncHandler(async (req, res) => {
     pendingCreditLRD: r2(pendingCredits.reduce((sum, c) => sum + (Number(c.totalLRD) || 0), 0)),
     pendingCreditUSD: r2(pendingCredits.reduce((sum, c) => sum + (Number(c.totalUSD) || 0), 0)),
     totalExpensesLRD,
+    totalExpensesUSD,
     totalExpensesCount: expenses.length
   })
 })
