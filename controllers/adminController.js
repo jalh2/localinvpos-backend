@@ -55,14 +55,16 @@ const createUser = asyncHandler(async (req, res) => {
     storeId = store.id
   }
 
-  let inheritedSubCode = ''
-  let inheritedVerifiedCode = ''
+  let resolvedSubCode = String(req.body.subscriptionCode || '').trim()
+  let resolvedVerifiedCode = ''
+  const now = new Date().toISOString()
+
   if (role === 'employee' && storeId) {
     const owners = await userModel.findAll({ storeId, role: 'owner' })
     const storeOwner = owners[0] || null
     if (storeOwner) {
-      inheritedSubCode = storeOwner.subscriptionCode || ''
-      inheritedVerifiedCode = storeOwner.subscriptionVerifiedCode || ''
+      resolvedSubCode = storeOwner.subscriptionCode || ''
+      resolvedVerifiedCode = storeOwner.subscriptionVerifiedCode || ''
     }
   }
 
@@ -77,13 +79,14 @@ const createUser = asyncHandler(async (req, res) => {
     storeId,
     baseCurrency: req.body.baseCurrency || 'LRD',
     exchangeRateUsdToLrd: Number(req.body.exchangeRateUsdToLrd) || 180,
-    subscriptionCode: inheritedSubCode,
-    subscriptionVerifiedCode: inheritedVerifiedCode
+    subscriptionCode: resolvedSubCode,
+    subscriptionVerifiedCode: resolvedVerifiedCode,
+    subscriptionCodeSetAt: resolvedSubCode ? now : null
   })
 
   if (storeId && role === 'owner') await storeModel.update(storeId, { ownerId: user.id })
 
-  res.status(201).json(sanitizeUser(user))
+  res.status(201).json({ ...sanitizeUser(user), subscriptionCode: resolvedSubCode, subscriptionCodeSetAt: resolvedSubCode ? now : null })
 })
 
 const createOwner = createUser
