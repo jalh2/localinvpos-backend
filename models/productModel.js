@@ -11,13 +11,20 @@ const defaults = {
   brand: '',
   quantityInStock: 0,
   unitCost: 0,
+  unitCostCurrency: 'LRD',
   sellingPriceLRD: 0,
   sellingPriceUSD: 0,
+  wholesalePriceLRD: 0,
+  wholesalePriceUSD: 0,
+  productType: 'retail', // 'retail' or 'wholesale'
   restockLevel: 0,
+  warningLimit: 0,
   supplier: '',
   notes: '',
   barcode: '',
   image: '',
+  storageLocation: '',
+  expirationDate: '',
   createdAt: null,
   updatedAt: null
 }
@@ -45,9 +52,14 @@ const create = async (data) => {
     ...data,
     quantityInStock: quantity,
     unitCost: Number(data.unitCost) || 0,
+    unitCostCurrency: data.unitCostCurrency || 'LRD',
     sellingPriceLRD: Number(data.sellingPriceLRD) || 0,
     sellingPriceUSD: Number(data.sellingPriceUSD) || 0,
+    wholesalePriceLRD: Number(data.wholesalePriceLRD) || 0,
+    wholesalePriceUSD: Number(data.wholesalePriceUSD) || 0,
+    productType: data.productType === 'wholesale' ? 'wholesale' : 'retail',
     restockLevel: Number(data.restockLevel) || 0,
+    warningLimit: Number(data.warningLimit) || 0,
     createdAt: now,
     updatedAt: now
   }

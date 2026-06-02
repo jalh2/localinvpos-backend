@@ -4,7 +4,7 @@ const { hashPassword } = require('../utils/encryption')
 
 const sanitizeUser = (user) => {
   if (!user) return null
-  const { password, ...safeUser } = user
+  const { password, subscriptionCode, ...safeUser } = user
   return safeUser
 }
 
@@ -53,6 +53,17 @@ const createStoreUser = asyncHandler(async (req, res) => {
     throw new Error('Only superadmins can create additional owners')
   }
 
+  let inheritedSubCode = ''
+  let inheritedVerifiedCode = ''
+  if (newRole === 'employee') {
+    const owners = await userModel.findAll({ storeId, role: 'owner' })
+    const storeOwner = owners[0] || null
+    if (storeOwner) {
+      inheritedSubCode = storeOwner.subscriptionCode || ''
+      inheritedVerifiedCode = storeOwner.subscriptionVerifiedCode || ''
+    }
+  }
+
   const user = await userModel.create({
     username: loginName,
     email: String(email || '').trim().toLowerCase(),
@@ -63,7 +74,9 @@ const createStoreUser = asyncHandler(async (req, res) => {
     isActive: true,
     storeId,
     baseCurrency: req.user?.baseCurrency || 'LRD',
-    exchangeRateUsdToLrd: req.user?.exchangeRateUsdToLrd || 180
+    exchangeRateUsdToLrd: req.user?.exchangeRateUsdToLrd || 180,
+    subscriptionCode: inheritedSubCode,
+    subscriptionVerifiedCode: inheritedVerifiedCode
   })
 
   res.status(201).json(sanitizeUser(user))

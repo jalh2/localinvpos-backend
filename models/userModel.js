@@ -13,6 +13,9 @@ const defaults = {
   storeId: '',
   baseCurrency: 'LRD',
   exchangeRateUsdToLrd: 180,
+  subscriptionCode: '',
+  subscriptionVerifiedCode: '',
+  subscriptionCodeSetAt: null,
   createdAt: null,
   updatedAt: null
 }

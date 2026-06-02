@@ -5,7 +5,7 @@ const { hashPassword, verifyPassword } = require('../utils/encryption')
 
 const sanitizeUser = (user) => {
   if (!user) return null
-  const { password, ...safeUser } = user
+  const { password, subscriptionCode, ...safeUser } = user
   return safeUser
 }
 
@@ -73,9 +73,18 @@ const login = asyncHandler(async (req, res) => {
     throw new Error('Account is inactive')
   }
 
+  const subCode = user.subscriptionCode || ''
+  const verifiedCode = user.subscriptionVerifiedCode || ''
+  const needsVerification = subCode !== '' && verifiedCode !== subCode
+
+  if (subCode !== '' && verifiedCode !== '' && verifiedCode !== subCode) {
+    res.status(403)
+    throw new Error('Subscription verification failed. Please enter your subscription code.')
+  }
+
   const safeUser = sanitizeUser(user)
   req.session.user = safeUser
-  res.json(safeUser)
+  res.json({ ...safeUser, needsVerification })
 })
 
 const logout = asyncHandler(async (req, res) => {
@@ -106,6 +115,38 @@ const updateMe = asyncHandler(async (req, res) => {
   res.json(sanitizeUser(user))
 })
 
+const verifySubscription = asyncHandler(async (req, res) => {
+  const { username, email, code } = req.body
+  const loginName = username || email
+  if (!loginName || !code) {
+    res.status(400)
+    throw new Error('Username and code are required')
+  }
+  const user = await userModel.findByUsername(loginName)
+  if (!user) {
+    res.status(404)
+    throw new Error('User not found')
+  }
+  if (!user.subscriptionCode) {
+    res.status(400)
+    throw new Error('No subscription code has been set for this account')
+  }
+  if (user.subscriptionCode !== code) {
+    res.status(403)
+    throw new Error('Incorrect subscription code')
+  }
+  const updated = await userModel.update(user.id, { subscriptionVerifiedCode: code })
+  if (user.role === 'owner' && user.storeId) {
+    const employees = await userModel.findAll({ storeId: user.storeId, role: 'employee' })
+    await Promise.all(employees.map(emp =>
+      userModel.update(emp.id, { subscriptionCode: code, subscriptionVerifiedCode: code })
+    ))
+  }
+  const safeUser = sanitizeUser(updated)
+  req.session.user = safeUser
+  res.json({ ...safeUser, needsVerification: false })
+})
+
 const getMyStore = asyncHandler(async (req, res) => {
   const storeId = req.user && req.user.storeId
   if (!storeId) return res.json(null)
@@ -113,4 +154,4 @@ const getMyStore = asyncHandler(async (req, res) => {
   res.json(store)
 })
 
-module.exports = { sanitizeUser, register, login, logout, me, updateMe, getMyStore }
+module.exports = { sanitizeUser, register, login, logout, me, updateMe, getMyStore, verifySubscription }

@@ -13,7 +13,8 @@ const {
   getOwner,
   updateUser,
   updateOwner,
-  overview
+  overview,
+  setSubscriptionCode
 } = require('../controllers/adminController')
 
 const router = express.Router()
@@ -29,6 +30,7 @@ router.post('/users', createUser)
 router.get('/users', listUsers)
 router.get('/users/:id', getUser)
 router.put('/users/:id', updateUser)
+router.put('/users/:id/subscription-code', setSubscriptionCode)
 router.post('/owners', createOwner)
 router.get('/owners', listOwners)
 router.get('/owners/:id', getOwner)

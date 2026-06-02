@@ -55,6 +55,17 @@ const createUser = asyncHandler(async (req, res) => {
     storeId = store.id
   }
 
+  let inheritedSubCode = ''
+  let inheritedVerifiedCode = ''
+  if (role === 'employee' && storeId) {
+    const owners = await userModel.findAll({ storeId, role: 'owner' })
+    const storeOwner = owners[0] || null
+    if (storeOwner) {
+      inheritedSubCode = storeOwner.subscriptionCode || ''
+      inheritedVerifiedCode = storeOwner.subscriptionVerifiedCode || ''
+    }
+  }
+
   const user = await userModel.create({
     username: req.body.username || req.body.email,
     email: req.body.email || '',
@@ -65,7 +76,9 @@ const createUser = asyncHandler(async (req, res) => {
     isActive: req.body.isActive !== false,
     storeId,
     baseCurrency: req.body.baseCurrency || 'LRD',
-    exchangeRateUsdToLrd: Number(req.body.exchangeRateUsdToLrd) || 180
+    exchangeRateUsdToLrd: Number(req.body.exchangeRateUsdToLrd) || 180,
+    subscriptionCode: inheritedSubCode,
+    subscriptionVerifiedCode: inheritedVerifiedCode
   })
 
   if (storeId && role === 'owner') await storeModel.update(storeId, { ownerId: user.id })
@@ -129,4 +142,30 @@ const overview = asyncHandler(async (req, res) => {
   })
 })
 
-module.exports = { createStore, listStores, getStore, updateStore, createUser, createOwner, listUsers, listOwners, getUser, getOwner, updateUser, updateOwner, overview }
+const setSubscriptionCode = asyncHandler(async (req, res) => {
+  const { code } = req.body
+  if (!code || !String(code).trim()) {
+    res.status(400)
+    throw new Error('code is required')
+  }
+  const trimmedCode = String(code).trim()
+  const user = await userModel.findById(req.params.id)
+  if (!user) {
+    res.status(404)
+    throw new Error('User not found')
+  }
+  const now = new Date().toISOString()
+  const updated = await userModel.update(user.id, {
+    subscriptionCode: trimmedCode,
+    subscriptionCodeSetAt: now
+  })
+  if (user.storeId) {
+    const employees = await userModel.findAll({ storeId: user.storeId, role: 'employee' })
+    await Promise.all(employees.map(emp =>
+      userModel.update(emp.id, { subscriptionCode: trimmedCode, subscriptionCodeSetAt: now })
+    ))
+  }
+  res.json({ ...sanitizeUser(updated), subscriptionCode: trimmedCode, subscriptionCodeSetAt: now })
+})
+
+module.exports = { createStore, listStores, getStore, updateStore, createUser, createOwner, listUsers, listOwners, getUser, getOwner, updateUser, updateOwner, overview, setSubscriptionCode }
