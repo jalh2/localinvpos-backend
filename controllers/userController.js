@@ -61,7 +61,7 @@ const register = asyncHandler(async (req, res) => {
 const login = asyncHandler(async (req, res) => {
   const { username, email, password } = req.body
   const loginName = username || email
-  const user = await userModel.findByUsername(loginName)
+  const user = await userModel.findByLogin(loginName)
 
   if (!user || !verifyPassword(password, user.password)) {
     res.status(401)
@@ -122,7 +122,7 @@ const verifySubscription = asyncHandler(async (req, res) => {
     res.status(400)
     throw new Error('Username and code are required')
   }
-  const user = await userModel.findByUsername(loginName)
+  const user = await userModel.findByLogin(loginName)
   if (!user) {
     res.status(404)
     throw new Error('User not found')

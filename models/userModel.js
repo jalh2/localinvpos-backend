@@ -36,6 +36,15 @@ const findByUsername = async (username) => {
   return withId(snapshot.docs[0])
 }
 
+const findByLogin = async (login) => {
+  const value = String(login || '').trim().toLowerCase()
+  if (!value) return null
+  let snapshot = await collection.where('username', '==', value).limit(1).get()
+  if (snapshot.empty) snapshot = await collection.where('email', '==', value).limit(1).get()
+  if (snapshot.empty) return null
+  return withId(snapshot.docs[0])
+}
+
 const create = async (data) => {
   const now = new Date().toISOString()
   const docData = {
@@ -68,4 +77,4 @@ const findAll = async ({ role, storeId } = {}) => {
   return snapshot.docs.map(withId).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 }
 
-module.exports = { collection, defaults, findById, findByUsername, create, update, remove, findAll }
+module.exports = { collection, defaults, findById, findByUsername, findByLogin, create, update, remove, findAll }
