@@ -46,6 +46,57 @@ const applyDiscount = (totals, body) => {
   }
 }
 
+const buildReturnLineItems = async (items = []) => {
+  const lines = []
+  for (const item of items) {
+    const product = await productModel.findById(item.productId || item.product)
+    if (!product) throw new Error(`Product not found: ${item.productId || item.product}`)
+    const quantity = Number(item.quantity) || 0
+    if (quantity <= 0) throw new Error(`Invalid return quantity for ${product.productName}`)
+    lines.push({
+      productId: product.id,
+      productName: product.productName,
+      quantity,
+      priceAtSale: {
+        USD: Number(item.priceUSD ?? product.sellingPriceUSD) || 0,
+        LRD: Number(item.priceLRD ?? product.sellingPriceLRD) || 0
+      },
+      unitCostAtSale: Number(product.unitCost) || 0
+    })
+  }
+  return lines
+}
+
+const createReturn = asyncHandler(async (req, res) => {
+  const scope = getScope(req)
+  const items = req.body.productsReturned || req.body.items || []
+  if (items.length === 0) {
+    res.status(400)
+    throw new Error('No items selected for return')
+  }
+
+  const productsSold = await buildReturnLineItems(items)
+  const subtotal = totalsFromLineItems(productsSold)
+
+  for (const line of productsSold) {
+    await productModel.adjustQuantity(line.productId, line.quantity)
+  }
+
+  const transaction = await transactionModel.create({
+    ...req.body,
+    storeId: scope.storeId || req.body.storeId,
+    ownerId: scope.ownerId || req.body.ownerId,
+    type: 'return',
+    productsSold,
+    subtotalLRD: subtotal.totalLRD,
+    subtotalUSD: subtotal.totalUSD,
+    totalLRD: subtotal.totalLRD,
+    totalUSD: subtotal.totalUSD
+  })
+
+  res.status(201).json(transaction)
+})
+
 const listTransactions = asyncHandler(async (req, res) => {
   const scope = getScope(req)
   const range = parseDateRange(req.query)
@@ -89,4 +140,4 @@ const getTransaction = asyncHandler(async (req, res) => {
   res.json(transaction)
 })
 
-module.exports = { listTransactions, createTransaction, getTransaction, buildLineItems }
+module.exports = { listTransactions, createTransaction, createReturn, getTransaction, buildLineItems }
