@@ -11,6 +11,7 @@ const defaults = {
   phone: '',
   isActive: true,
   storeId: '',
+  storeIds: [],
   baseCurrency: 'LRD',
   exchangeRateUsdToLrd: 180,
   subscriptionCode: '',
@@ -77,4 +78,23 @@ const findAll = async ({ role, storeId } = {}) => {
   return snapshot.docs.map(withId).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 }
 
-module.exports = { collection, defaults, findById, findByUsername, findByLogin, create, update, remove, findAll }
+// Returns users whose primary storeId OR any entry in storeIds matches the store
+const findByStoreAccess = async (storeId, { role } = {}) => {
+  if (!storeId) return []
+  const byPrimary = await findAll({ storeId, role })
+  let multiQuery = collection.where('storeIds', 'array-contains', storeId)
+  if (role) multiQuery = multiQuery.where('role', '==', role)
+  const multiSnap = await multiQuery.get()
+  const seen = new Set(byPrimary.map(u => u.id))
+  const merged = [...byPrimary]
+  for (const doc of multiSnap.docs) {
+    const user = withId(doc)
+    if (!seen.has(user.id)) {
+      seen.add(user.id)
+      merged.push(user)
+    }
+  }
+  return merged.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+}
+
+module.exports = { collection, defaults, findById, findByUsername, findByLogin, create, update, remove, findAll, findByStoreAccess }

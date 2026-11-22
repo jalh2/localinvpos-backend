@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler')
 const userModel = require('../models/userModel')
 const storeModel = require('../models/storeModel')
 const { hashPassword, verifyPassword } = require('../utils/encryption')
+const { getAccessibleStores, getAccessibleStoreIds } = require('../utils/userStores')
 
 const sanitizeUser = (user) => {
   if (!user) return null
@@ -47,6 +48,7 @@ const register = asyncHandler(async (req, res) => {
     phone: phone || '',
     isActive: true,
     storeId: store.id,
+    storeIds: [store.id],
     baseCurrency: baseCurrency || 'LRD',
     exchangeRateUsdToLrd: Number(exchangeRateUsdToLrd) || 180
   })
@@ -84,7 +86,8 @@ const login = asyncHandler(async (req, res) => {
 
   const safeUser = sanitizeUser(user)
   req.session.user = safeUser
-  res.json({ ...safeUser, needsVerification })
+  const stores = await getAccessibleStores(user)
+  res.json({ ...safeUser, needsVerification, stores })
 })
 
 const logout = asyncHandler(async (req, res) => {
@@ -144,7 +147,8 @@ const verifySubscription = asyncHandler(async (req, res) => {
   }
   const safeUser = sanitizeUser(updated)
   req.session.user = safeUser
-  res.json({ ...safeUser, needsVerification: false })
+  const stores = await getAccessibleStores(updated)
+  res.json({ ...safeUser, needsVerification: false, stores })
 })
 
 const getMyStore = asyncHandler(async (req, res) => {
@@ -154,4 +158,45 @@ const getMyStore = asyncHandler(async (req, res) => {
   res.json(store)
 })
 
-module.exports = { sanitizeUser, register, login, logout, me, updateMe, getMyStore, verifySubscription }
+const getMyStores = asyncHandler(async (req, res) => {
+  const id = req.user && req.user.id
+  if (!id) {
+    res.status(401)
+    throw new Error('Not authorized')
+  }
+  const user = await userModel.findById(id)
+  if (!user) {
+    res.status(404)
+    throw new Error('User not found')
+  }
+  res.json(await getAccessibleStores(user))
+})
+
+const switchMyStore = asyncHandler(async (req, res) => {
+  const id = req.user && req.user.id
+  if (!id) {
+    res.status(401)
+    throw new Error('Not authorized')
+  }
+  const user = await userModel.findById(id)
+  if (!user) {
+    res.status(404)
+    throw new Error('User not found')
+  }
+
+  const { storeId } = req.body
+  const accessibleIds = await getAccessibleStoreIds(user)
+  if (!storeId || !accessibleIds.includes(storeId)) {
+    res.status(403)
+    throw new Error('You do not have access to that store')
+  }
+
+  const storeIds = [...new Set([...(user.storeIds || []), user.storeId].filter(Boolean))]
+  const updated = await userModel.update(user.id, { storeId, storeIds })
+  const safeUser = sanitizeUser(updated)
+  req.session.user = safeUser
+  const store = await storeModel.findById(storeId)
+  res.json({ user: safeUser, store })
+})
+
+module.exports = { sanitizeUser, register, login, logout, me, updateMe, getMyStore, getMyStores, switchMyStore, verifySubscription }

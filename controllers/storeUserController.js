@@ -1,11 +1,17 @@
 const asyncHandler = require('express-async-handler')
 const userModel = require('../models/userModel')
 const { hashPassword } = require('../utils/encryption')
+const { getAccessibleStoreIds } = require('../utils/userStores')
 
 const sanitizeUser = (user) => {
   if (!user) return null
   const { password, subscriptionCode, ...safeUser } = user
   return safeUser
+}
+
+const hasStoreAccess = (targetUser, storeId) => {
+  if (!targetUser || !storeId) return false
+  return targetUser.storeId === storeId || (targetUser.storeIds || []).includes(storeId)
 }
 
 const listStoreUsers = asyncHandler(async (req, res) => {
@@ -15,7 +21,7 @@ const listStoreUsers = asyncHandler(async (req, res) => {
     throw new Error('No store assigned')
   }
 
-  const users = await userModel.findAll({ storeId })
+  const users = await userModel.findByStoreAccess(storeId)
   res.json(users.filter(u => u.role !== 'superadmin').map(sanitizeUser))
 })
 
@@ -53,6 +59,16 @@ const createStoreUser = asyncHandler(async (req, res) => {
     throw new Error('Only superadmins can create additional owners')
   }
 
+  // Owners can grant access to any of their own accessible stores
+  let storeIds = Array.isArray(req.body.storeIds) ? req.body.storeIds.filter(Boolean) : []
+  const actor = await userModel.findById(req.user.id)
+  const actorStoreIds = userRole === 'superadmin' ? storeIds : await getAccessibleStoreIds(actor)
+  if (userRole !== 'superadmin') {
+    storeIds = storeIds.filter(id => actorStoreIds.includes(id))
+  }
+  if (!storeIds.includes(storeId)) storeIds.unshift(storeId)
+  storeIds = [...new Set(storeIds)]
+
   let inheritedSubCode = ''
   let inheritedVerifiedCode = ''
   if (newRole === 'employee') {
@@ -73,6 +89,7 @@ const createStoreUser = asyncHandler(async (req, res) => {
     phone: phone || '',
     isActive: true,
     storeId,
+    storeIds,
     baseCurrency: req.user?.baseCurrency || 'LRD',
     exchangeRateUsdToLrd: req.user?.exchangeRateUsdToLrd || 180,
     subscriptionCode: inheritedSubCode,
@@ -90,7 +107,7 @@ const getStoreUser = asyncHandler(async (req, res) => {
   }
 
   const user = await userModel.findById(req.params.id)
-  if (!user || user.storeId !== storeId || user.role === 'superadmin') {
+  if (!user || !hasStoreAccess(user, storeId) || user.role === 'superadmin') {
     res.status(404)
     throw new Error('User not found')
   }
@@ -108,7 +125,7 @@ const updateStoreUser = asyncHandler(async (req, res) => {
   }
 
   const targetUser = await userModel.findById(req.params.id)
-  if (!targetUser || targetUser.storeId !== storeId || targetUser.role === 'superadmin') {
+  if (!targetUser || !hasStoreAccess(targetUser, storeId) || targetUser.role === 'superadmin') {
     res.status(404)
     throw new Error('User not found')
   }
@@ -121,6 +138,13 @@ const updateStoreUser = asyncHandler(async (req, res) => {
   const data = { ...req.body }
   if (data.role === 'superadmin') delete data.role
   if (data.storeId) delete data.storeId
+  if (Array.isArray(data.storeIds)) {
+    const actor = await userModel.findById(req.user.id)
+    const actorStoreIds = userRole === 'superadmin' ? data.storeIds : await getAccessibleStoreIds(actor)
+    data.storeIds = [...new Set([storeId, ...data.storeIds.filter(id => actorStoreIds.includes(id))])]
+    // Keep the target's active store consistent with their assignments
+    if (!data.storeIds.includes(targetUser.storeId)) data.storeId = data.storeIds[0] || ''
+  }
   if (data.password) data.password = hashPassword(data.password)
 
   const updated = await userModel.update(req.params.id, data)
@@ -137,7 +161,7 @@ const deleteStoreUser = asyncHandler(async (req, res) => {
   }
 
   const targetUser = await userModel.findById(req.params.id)
-  if (!targetUser || targetUser.storeId !== storeId || targetUser.role === 'superadmin') {
+  if (!targetUser || !hasStoreAccess(targetUser, storeId) || targetUser.role === 'superadmin') {
     res.status(404)
     throw new Error('User not found')
   }

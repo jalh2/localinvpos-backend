@@ -48,4 +48,10 @@ const findAll = async ({ ownerId, isActive } = {}) => {
   return snapshot.docs.map(withId).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 }
 
-module.exports = { collection, defaults, findById, create, update, remove, findAll }
+const findByIds = async (ids = []) => {
+  const unique = [...new Set(ids.filter(Boolean))]
+  const stores = await Promise.all(unique.map(findById))
+  return stores.filter(Boolean)
+}
+
+module.exports = { collection, defaults, findById, findByIds, create, update, remove, findAll }

@@ -41,7 +41,8 @@ const getScope = (req) => {
   const isSuperadmin = user.role === 'superadmin'
   return {
     userId: user.id || req.query.ownerId || req.body.ownerId || '',
-    ownerId: isSuperadmin ? req.query.ownerId || req.body.ownerId || '' : user.id || '',
+    // Employees are scoped by storeId (the store they belong to), not their own id
+    ownerId: isSuperadmin ? req.query.ownerId || req.body.ownerId || '' : (user.role === 'employee' && user.storeId ? '' : user.id || ''),
     storeId: isSuperadmin ? req.query.storeId || req.body.storeId || user.storeId || '' : user.storeId || req.query.storeId || req.body.storeId || '',
     role: user.role || 'owner'
   }

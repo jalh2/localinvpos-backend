@@ -40,7 +40,8 @@ const createUser = asyncHandler(async (req, res) => {
 
   const role = req.body.role === 'employee' ? 'employee' : 'owner'
 
-  let storeId = req.body.storeId
+  const requestedStoreIds = Array.isArray(req.body.storeIds) ? req.body.storeIds.filter(Boolean) : []
+  let storeId = req.body.storeId || requestedStoreIds[0] || ''
   let store = storeId ? await storeModel.findById(storeId) : null
 
   if (!store && req.body.storeName && role === 'owner') {
@@ -54,6 +55,8 @@ const createUser = asyncHandler(async (req, res) => {
     })
     storeId = store.id
   }
+
+  const storeIds = [...new Set([storeId, ...requestedStoreIds].filter(Boolean))]
 
   let resolvedSubCode = String(req.body.subscriptionCode || '').trim()
   let resolvedVerifiedCode = ''
@@ -77,6 +80,7 @@ const createUser = asyncHandler(async (req, res) => {
     phone: req.body.phone || '',
     isActive: req.body.isActive !== false,
     storeId,
+    storeIds,
     baseCurrency: req.body.baseCurrency || 'LRD',
     exchangeRateUsdToLrd: Number(req.body.exchangeRateUsdToLrd) || 180,
     subscriptionCode: resolvedSubCode,
@@ -84,7 +88,9 @@ const createUser = asyncHandler(async (req, res) => {
     subscriptionCodeSetAt: resolvedSubCode ? now : null
   })
 
-  if (storeId && role === 'owner') await storeModel.update(storeId, { ownerId: user.id })
+  if (role === 'owner') {
+    await Promise.all(storeIds.map(id => storeModel.update(id, { ownerId: user.id }).catch(() => null)))
+  }
 
   res.status(201).json({ ...sanitizeUser(user), subscriptionCode: resolvedSubCode, subscriptionCodeSetAt: resolvedSubCode ? now : null })
 })
@@ -120,8 +126,15 @@ const updateUser = asyncHandler(async (req, res) => {
   const data = { ...req.body }
   if (data.role === 'superadmin') delete data.role
   if (data.password) data.password = hashPassword(data.password)
+  if (Array.isArray(data.storeIds)) {
+    data.storeIds = [...new Set(data.storeIds.filter(Boolean))]
+    if (data.storeIds.length && !data.storeIds.includes(data.storeId)) data.storeId = data.storeIds[0]
+  }
   const user = await userModel.update(req.params.id, data)
-  if (data.storeId && user.role === 'owner') await storeModel.update(data.storeId, { ownerId: user.id })
+  if (user.role === 'owner') {
+    const idsToOwn = data.storeIds || (data.storeId ? [data.storeId] : [])
+    await Promise.all(idsToOwn.map(id => storeModel.update(id, { ownerId: user.id }).catch(() => null)))
+  }
   res.json(sanitizeUser(user))
 })
 
