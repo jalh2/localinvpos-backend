@@ -111,6 +111,7 @@ const updateMe = asyncHandler(async (req, res) => {
   const data = { ...req.body }
   delete data.role
   delete data.storeId
+  delete data.storeIds
   if (data.password) data.password = hashPassword(data.password)
 
   const user = await userModel.update(id, data)

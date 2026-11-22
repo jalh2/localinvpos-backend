@@ -6,6 +6,9 @@ const transactionModel = require('../models/transactionModel')
 const creditModel = require('../models/creditModel')
 const { hashPassword } = require('../utils/encryption')
 const { sanitizeUser } = require('./userController')
+const { getAccessibleStores } = require('../utils/userStores')
+
+const withStores = async (user) => ({ ...sanitizeUser(user), stores: await getAccessibleStores(user) })
 
 const createStore = asyncHandler(async (req, res) => {
   const store = await storeModel.create(req.body)
@@ -99,16 +102,15 @@ const createOwner = createUser
 
 const listUsers = asyncHandler(async (req, res) => {
   const { role, storeId } = req.query
-  const filter = {}
-  if (role) filter.role = role
-  if (storeId) filter.storeId = storeId
-  const users = await userModel.findAll(filter)
-  res.json(users.filter(u => u.role !== 'superadmin').map(sanitizeUser))
+  const users = storeId
+    ? await userModel.findByStoreAccess(storeId, { role })
+    : await userModel.findAll({ ...(role ? { role } : {}) })
+  res.json(await Promise.all(users.filter(u => u.role !== 'superadmin').map(withStores)))
 })
 
 const listOwners = asyncHandler(async (req, res) => {
   const owners = await userModel.findAll({ role: 'owner', storeId: req.query.storeId })
-  res.json(owners.map(sanitizeUser))
+  res.json(await Promise.all(owners.map(withStores)))
 })
 
 const getUser = asyncHandler(async (req, res) => {
@@ -117,7 +119,7 @@ const getUser = asyncHandler(async (req, res) => {
     res.status(404)
     throw new Error('User not found')
   }
-  res.json(sanitizeUser(user))
+  res.json(await withStores(user))
 })
 
 const getOwner = getUser

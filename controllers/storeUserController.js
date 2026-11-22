@@ -1,7 +1,7 @@
 const asyncHandler = require('express-async-handler')
 const userModel = require('../models/userModel')
 const { hashPassword } = require('../utils/encryption')
-const { getAccessibleStoreIds } = require('../utils/userStores')
+const { getAccessibleStoreIds, getAccessibleStores } = require('../utils/userStores')
 
 const sanitizeUser = (user) => {
   if (!user) return null
@@ -22,7 +22,10 @@ const listStoreUsers = asyncHandler(async (req, res) => {
   }
 
   const users = await userModel.findByStoreAccess(storeId)
-  res.json(users.filter(u => u.role !== 'superadmin').map(sanitizeUser))
+  res.json(await Promise.all(users.filter(u => u.role !== 'superadmin').map(async u => ({
+    ...sanitizeUser(u),
+    stores: await getAccessibleStores(u)
+  }))))
 })
 
 const createStoreUser = asyncHandler(async (req, res) => {
@@ -112,7 +115,7 @@ const getStoreUser = asyncHandler(async (req, res) => {
     throw new Error('User not found')
   }
 
-  res.json(sanitizeUser(user))
+  res.json({ ...sanitizeUser(user), stores: await getAccessibleStores(user) })
 })
 
 const updateStoreUser = asyncHandler(async (req, res) => {
