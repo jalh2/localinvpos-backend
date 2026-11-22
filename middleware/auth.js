@@ -38,12 +38,13 @@ const requireRole = (...roles) => (req, res, next) => {
 
 const getScope = (req) => {
   const user = req.user || getRequestUser(req) || {}
+  const body = req.body || {}
   const isSuperadmin = user.role === 'superadmin'
   return {
-    userId: user.id || req.query.ownerId || req.body.ownerId || '',
+    userId: user.id || req.query.ownerId || body.ownerId || '',
     // Employees are scoped by storeId (the store they belong to), not their own id
-    ownerId: isSuperadmin ? req.query.ownerId || req.body.ownerId || '' : (user.role === 'employee' && user.storeId ? '' : user.id || ''),
-    storeId: isSuperadmin ? req.query.storeId || req.body.storeId || user.storeId || '' : user.storeId || req.query.storeId || req.body.storeId || '',
+    ownerId: isSuperadmin ? req.query.ownerId || body.ownerId || '' : (user.role === 'employee' && user.storeId ? '' : user.id || ''),
+    storeId: isSuperadmin ? req.query.storeId || body.storeId || user.storeId || '' : user.storeId || req.query.storeId || body.storeId || '',
     role: user.role || 'owner'
   }
 }

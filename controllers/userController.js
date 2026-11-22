@@ -60,10 +60,29 @@ const register = asyncHandler(async (req, res) => {
   res.status(201).json(safeUser)
 })
 
+// Persists the user's chosen active store if it's one they can access
+const applyStoreChoice = async (user, storeId) => {
+  if (!storeId) return user
+  const accessibleIds = await getAccessibleStoreIds(user)
+  if (!accessibleIds.includes(storeId)) return user
+  const storeIds = [...new Set([...(user.storeIds || []), user.storeId, storeId].filter(Boolean))]
+  return userModel.update(user.id, { storeId, storeIds })
+}
+
+const lookupStores = asyncHandler(async (req, res) => {
+  const { username, email } = req.body
+  const user = await userModel.findByLogin(username || email)
+  if (!user) {
+    res.status(404)
+    throw new Error('No account found with that username or email')
+  }
+  res.json({ stores: await getAccessibleStores(user) })
+})
+
 const login = asyncHandler(async (req, res) => {
-  const { username, email, password } = req.body
+  const { username, email, password, storeId } = req.body
   const loginName = username || email
-  const user = await userModel.findByLogin(loginName)
+  let user = await userModel.findByLogin(loginName)
 
   if (!user || !verifyPassword(password, user.password)) {
     res.status(401)
@@ -83,6 +102,8 @@ const login = asyncHandler(async (req, res) => {
     res.status(403)
     throw new Error('Subscription verification failed. Please enter your subscription code.')
   }
+
+  user = await applyStoreChoice(user, storeId)
 
   const safeUser = sanitizeUser(user)
   req.session.user = safeUser
@@ -120,7 +141,7 @@ const updateMe = asyncHandler(async (req, res) => {
 })
 
 const verifySubscription = asyncHandler(async (req, res) => {
-  const { username, email, code } = req.body
+  const { username, email, code, storeId } = req.body
   const loginName = username || email
   if (!loginName || !code) {
     res.status(400)
@@ -139,7 +160,8 @@ const verifySubscription = asyncHandler(async (req, res) => {
     res.status(403)
     throw new Error('Incorrect subscription code')
   }
-  const updated = await userModel.update(user.id, { subscriptionVerifiedCode: code })
+  let updated = await userModel.update(user.id, { subscriptionVerifiedCode: code })
+  updated = await applyStoreChoice(updated, storeId)
   if (user.role === 'owner' && user.storeId) {
     const employees = await userModel.findAll({ storeId: user.storeId, role: 'employee' })
     await Promise.all(employees.map(emp =>
@@ -200,4 +222,4 @@ const switchMyStore = asyncHandler(async (req, res) => {
   res.json({ user: safeUser, store })
 })
 
-module.exports = { sanitizeUser, register, login, logout, me, updateMe, getMyStore, getMyStores, switchMyStore, verifySubscription }
+module.exports = { sanitizeUser, register, login, lookupStores, logout, me, updateMe, getMyStore, getMyStores, switchMyStore, verifySubscription }
