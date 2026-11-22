@@ -1,7 +1,7 @@
 const asyncHandler = require('express-async-handler')
 const userModel = require('../models/userModel')
 const storeModel = require('../models/storeModel')
-const { hashPassword, verifyPassword } = require('../utils/encryption')
+const { hashPassword, verifyPassword, isHashed } = require('../utils/encryption')
 const { getAccessibleStores, getAccessibleStoreIds } = require('../utils/userStores')
 
 const sanitizeUser = (user) => {
@@ -92,6 +92,11 @@ const login = asyncHandler(async (req, res) => {
   if (user.isActive === false) {
     res.status(403)
     throw new Error('Account is inactive')
+  }
+
+  // Upgrade legacy plaintext passwords to a salted hash
+  if (!isHashed(user.password)) {
+    user = await userModel.update(user.id, { password: hashPassword(password) })
   }
 
   const subCode = user.subscriptionCode || ''
